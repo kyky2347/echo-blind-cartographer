@@ -169,6 +169,10 @@ Desktop navigation is a fixed 64px hairline-separated bar with a spaced Oxanium 
 
 Particles, probability density, structure memory, scan likelihood, and Hunter belief share a coordinate system but have distinct marks. Normal Play never reveals true state. X-Ray uses bone for the true player, oxide for the true Hunter, mineral cyan for player particles, blue-violet for observation likelihood, and amber for Hunter belief; every role also appears in a text legend.
 
+X-Ray places playback controls between the page header and map, with a compact two-row control layout on mobile. A paused field renders only when its content or size changes. System reduced motion suppresses the Play sonar pulse. Canvas loading and retry messages use body-sized text, and the intro keeps background controls inert until dismissed.
+
+Storage failure feedback is a flat, bordered message row above the debrief or replay, with a secondary JSON download action. It states that the run is temporary and asks the player to save a backup before reloading. Clipboard denial exposes the actual seed as selectable text. Every recovery message and control has equivalent English and Simplified Chinese copy.
+
 ### Sensor Card
 
 Each sensor card always names three consequences: expected information, energy cost, and signal emitted. The values Low, Medium, and High remain visible on mobile so emission risk is not color-only. Sonar may add an oxide line because the text already identifies its high signal.

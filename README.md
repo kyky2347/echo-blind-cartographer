@@ -173,14 +173,14 @@ pnpm test:e2e    # Chromium desktop and mobile product journeys
 pnpm benchmark   # deterministic engine benchmark
 ```
 
-Current verified baseline on 2026-09-03:
+Current verified baseline on 2026-09-19:
 
 | Gate | Result |
 | --- | --- |
 | ESLint | Zero warnings |
 | TypeScript | Strict workspace typecheck passes |
-| Vitest | 18 engine and frontend tests pass |
-| Playwright | 7 journeys pass; 1 desktop skip is a mobile-only assertion |
+| Vitest | 38 engine and frontend tests pass |
+| Playwright | 13 journeys pass; 1 desktop skip is a mobile-only assertion |
 | Next.js | 10 routes build successfully |
 
 CI installs from the lockfile, runs lint, strict typechecking, unit/component tests and the production build, then installs Chromium and executes the desktop browser suite on every push and pull request. Benchmarks remain an explicit local measurement step because results are hardware-dependent.
@@ -191,10 +191,20 @@ Measured on Apple M4, Darwin arm64, Node v24.18.0, 30 rounds:
 
 | Operation | Mean | p95 |
 | --- | ---: | ---: |
-| 48 × 48 facility generation | 1.17 ms | 1.79 ms |
-| 10,000-particle sonar update and possible resample | 3.10 ms | 4.01 ms |
+| 48 × 48 facility generation | 1.05 ms | 1.55 ms |
+| 10,000-particle sonar update and possible resample | 2.86 ms | 3.77 ms |
 
 These are engine measurements from `pnpm benchmark`, not invented browser-frame claims. Live PixiJS rendering reuses its WebGL application, caps Play at 30 FPS, limits device pixel ratio to 2, and pauses ambient work outside the viewport or while the document is hidden. See [performance methodology](docs/performance.md).
+
+X-Ray renders on demand, so a paused replay has no continuous render loop. Replay charts skip updates when only the timeline cursor changes, while language and data changes still refresh the charts. Playback controls sit above the map on desktop and mobile; playback stops at the end and pauses when the tab is hidden.
+
+## Storage and recovery
+
+Up to 12 completed runs are kept in the local archive. Saved metrics, grids, particles, and positions are validated before rendering; invalid entries are skipped independently. An unchanged archive reuses its parsed data across History, Debrief, and X-Ray.
+
+If browser storage is full or disabled, the new run stays available during the current page session. Debrief and X-Ray show a notice with a **Download replay JSON** backup action. Existing saved history is preserved on a failed write. Session-only runs disappear after reloading or closing the tab, and JSON import is not currently supported. Language switching and accessibility preferences remain usable for the current session when storage is unavailable.
+
+See the [changelog](CHANGELOG.md) for the latest improvements.
 
 ## English / 中文
 
@@ -203,6 +213,8 @@ ECHO supports English and Simplified Chinese across navigation, gameplay, sensor
 ECHO 是一款双语概率探索游戏。玩家无法看到真实地图或真实坐标，只能根据带噪移动与传感器观测，通过粒子滤波器逐步建立位置后验。更强的传感器会更快降低不确定性，但也会产生更强的信号，让维护独立贝叶斯后验的猎手更容易找到玩家。
 
 项目提供完整游戏流程、每日种子、概率实验室、本地历史、结算分析、X-Ray 回放、桌面与移动端适配，以及可复现的确定性测试。界面右上角可以随时切换 English / 中文。
+
+本次优化加入了按需绘制的 X-Ray、不会随时间轴反复计算的图表、位于地图上方的回放控制，以及存档校验和存储异常恢复。浏览器存储不可用时，仍可在当前会话中复盘并下载 JSON 备份；刷新或关闭页面后临时记录会消失，目前不支持导入 JSON。语言和无障碍选项在存储受限时仍可使用。
 
 快速启动：
 

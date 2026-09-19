@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import { createGame, movePlayer, useSensor, type Difficulty, type Direction, type GameState, type SensorKind } from "@echo/inference-core";
 
 type GameStore = {
@@ -50,6 +50,20 @@ export const useGameStore = create<GameStore>()(persist((set) => ({
   setHighContrast: (highContrast) => set({ highContrast }),
 }), {
   name: "echo-preferences-v1",
+  storage: createJSONStorage(() => ({
+    getItem: (key) => { try { return window.localStorage.getItem(key); } catch { return null; } },
+    setItem: (key, value) => { try { window.localStorage.setItem(key, value); } catch { /* Session preferences still work. */ } },
+    removeItem: (key) => { try { window.localStorage.removeItem(key); } catch { /* Storage may be disabled. */ } },
+  })),
+  merge: (persisted, current) => {
+    if (typeof persisted !== "object" || persisted === null) return current;
+    const preferences = persisted as Record<string, unknown>;
+    const valid: Partial<GameStore> = {};
+    for (const key of ["introSeen", "muted", "reduceParticles", "highContrast"] as const) {
+      if (typeof preferences[key] === "boolean") valid[key] = preferences[key];
+    }
+    return { ...current, ...valid };
+  },
   partialize: (state) => ({
     introSeen: state.introSeen,
     muted: state.muted,

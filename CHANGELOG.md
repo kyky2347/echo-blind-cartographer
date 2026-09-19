@@ -2,6 +2,18 @@
 
 All notable project changes are documented here.
 
+## 2026-09-19 — Replay performance and recovery
+
+- Render X-Ray only when its frame, size, visibility, or particle settings change. Reuse the renderer while scrubbing and pause playback when the tab is hidden.
+- Avoid recomputing replay charts during cursor-only changes, while preserving language and data updates.
+- Place playback controls above the map, stop at the last frame, pause on scrubbing, and restart predictably.
+- Validate stored chart values, score inputs, grids, particles, and positions. Reuse unchanged archive data across routes.
+- Keep failed saves available in memory, preserve existing saved history, and offer a translated notice and JSON backup download. JSON import remains unsupported.
+- Keep language and accessibility preferences usable when browser storage is blocked; ignore malformed persisted preference values.
+- Add selectable-seed feedback for clipboard failure, translated canvas labels and retry states, safe cleanup during asynchronous graphics initialization, reduced-motion sonar, and protected intro focus.
+- Use the frozen lockfile in the one-command launcher.
+- Expand regression coverage to 38 unit/component tests and 13 passing desktop/mobile browser journeys, with one intentionally skipped desktop instance of a mobile-only test.
+
 ## 1.0.0 — 2026-09-03
 
 ### Added

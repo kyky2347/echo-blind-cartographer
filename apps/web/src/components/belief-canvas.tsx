@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Application, Graphics } from "pixi.js";
 import type { Facility, GameState, PlayProjection, ReplayFrame } from "@echo/inference-core";
+import { useI18n } from "@/lib/i18n";
+import { Button } from "@/components/ui/button";
 
 type DebugLayer = Pick<GameState, "facility" | "truth" | "belief" | "hunterBelief" | "hunterTarget">;
 type RenderPerformance = { fps: number; renderMs: number };
@@ -15,6 +17,9 @@ type BeliefCanvasProps = {
 };
 
 export function BeliefCanvas({ projection, reduceParticles, debug, onPerformance }: BeliefCanvasProps) {
+  const { t } = useI18n();
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
   const hostRef = useRef<HTMLDivElement>(null);
   const propsRef = useRef({ projection, reduceParticles, debug, onPerformance });
   const redrawRef = useRef<(() => void) | null>(null);
@@ -27,6 +32,7 @@ export function BeliefCanvas({ projection, reduceParticles, debug, onPerformance
     if (!host) return;
     let disposed = false;
     let app: Application | null = null;
+    let initialized = false;
     let field: Graphics | null = null;
     let pulse: Graphics | null = null;
     let renderedWidth = 0;
@@ -39,6 +45,7 @@ export function BeliefCanvas({ projection, reduceParticles, debug, onPerformance
     let sampleFrames = 0;
     let renderTotal = 0;
     let visibilityCleanup = () => {};
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     const drawField = () => {
       if (!app || !field) return;
@@ -98,10 +105,10 @@ export function BeliefCanvas({ projection, reduceParticles, debug, onPerformance
 
       renderedWidth = width;
       renderedHeight = height;
+      if (currentProjection.lastAction === "sensor:sonar" && currentProjection !== renderedProjection) pulseStarted = performance.now();
       renderedProjection = currentProjection;
       renderedDebug = currentDebug;
       renderedReduced = current.reduceParticles;
-      if (currentProjection.lastAction === "sensor:sonar") pulseStarted = performance.now();
     };
 
     const drawPulse = (now: number) => {
@@ -109,7 +116,7 @@ export function BeliefCanvas({ projection, reduceParticles, debug, onPerformance
       const current = propsRef.current;
       pulse.clear();
       const elapsed = now - pulseStarted;
-      if (current.reduceParticles || current.projection.lastAction !== "sensor:sonar" || elapsed > 1400) return;
+      if (current.reduceParticles || reducedMotion.matches || current.projection.lastAction !== "sensor:sonar" || elapsed > 1400) return;
       const progress = elapsed / 1400;
       const radius = Math.min(app.screen.width, app.screen.height) * 0.48 * progress;
       pulse.circle(app.screen.width / 2, app.screen.height / 2, radius).stroke({ color: 0x79ddcb, width: 1.5, alpha: 0.65 * (1 - progress) });
@@ -121,11 +128,13 @@ export function BeliefCanvas({ projection, reduceParticles, debug, onPerformance
       if (disposed) return;
       app = new PIXI.Application();
       await app.init({ resizeTo: host, backgroundAlpha: 0, antialias: true, resolution: Math.min(window.devicePixelRatio, 2), autoDensity: true });
+      initialized = true;
       if (disposed) {
         app.destroy(true);
         return;
       }
       host.appendChild(app.canvas);
+      setStatus("ready");
       field = new PIXI.Graphics();
       pulse = new PIXI.Graphics();
       app.stage.addChild(field, pulse);
@@ -161,22 +170,26 @@ export function BeliefCanvas({ projection, reduceParticles, debug, onPerformance
       visibilityCleanup = () => document.removeEventListener("visibilitychange", syncVisibility);
       syncVisibility();
     };
-    void boot();
+    setStatus("loading");
+    void boot().catch(() => { if (!disposed) setStatus("error"); });
     return () => {
       disposed = true;
       redrawRef.current = null;
       visibilityCleanup();
-      app?.destroy(true, { children: true });
+      if (initialized) app?.destroy(true, { children: true });
       host.replaceChildren();
     };
-  }, []);
+  }, [attempt]);
 
-  return <div ref={hostRef} className="size-full" aria-label="Probabilistic map field" role="img" />;
+  return <div className="absolute inset-0"><div ref={hostRef} className="size-full" aria-label={t("beliefField")} role="img" /><CanvasStatus status={status} onRetry={() => setAttempt((value) => value + 1)} /></div>;
 }
 
 type XRayCanvasProps = { facility: Facility; frame: ReplayFrame; reduceParticles?: boolean };
 
 export function XRayCanvas({ facility, frame, reduceParticles = false }: XRayCanvasProps) {
+  const { t } = useI18n();
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
   const hostRef = useRef<HTMLDivElement>(null);
   const propsRef = useRef({ facility, frame, reduceParticles });
   const redrawRef = useRef<(() => void) | null>(null);
@@ -189,12 +202,30 @@ export function XRayCanvas({ facility, frame, reduceParticles = false }: XRayCan
     if (!host) return;
     let disposed = false;
     let app: Application | null = null;
+    let initialized = false;
     let field: Graphics | null = null;
-    let renderedWidth = 0;
-    let renderedHeight = 0;
-    let renderedFacility: Facility | null = null;
-    let renderedFrame: ReplayFrame | null = null;
-    let renderedReduced = false;
+    let pendingFrame = 0;
+    let observer: ResizeObserver | undefined;
+
+    const requestDraw = () => {
+      if (disposed || !initialized || document.hidden || pendingFrame) return;
+      pendingFrame = requestAnimationFrame(() => {
+        pendingFrame = 0;
+        if (disposed || !app || document.hidden) return;
+        const width = Math.max(1, host.clientWidth);
+        const height = Math.max(1, host.clientHeight);
+        if (app.screen.width !== width || app.screen.height !== height) app.renderer.resize(width, height);
+        draw();
+        app.render();
+      });
+    };
+
+    const syncVisibility = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(pendingFrame);
+        pendingFrame = 0;
+      } else requestDraw();
+    };
 
     const draw = () => {
       if (!app || !field) return;
@@ -230,46 +261,46 @@ export function XRayCanvas({ facility, frame, reduceParticles = false }: XRayCan
       current.facility.cores.forEach((core) => field?.rect(offsetX + core.x * scale, offsetY + core.y * scale, scale, scale).stroke({ color: 0x91d48f, width: 1, alpha: 0.8 }));
       field.circle(offsetX + (current.frame.player.x + 0.5) * scale, offsetY + (current.frame.player.y + 0.5) * scale, 4).fill({ color: 0xf5fff9, alpha: 1 });
       field.circle(offsetX + (current.frame.hunter.x + 0.5) * scale, offsetY + (current.frame.hunter.y + 0.5) * scale, 4).fill({ color: 0xff655e, alpha: 1 });
-      renderedWidth = width;
-      renderedHeight = height;
-      renderedFacility = current.facility;
-      renderedFrame = current.frame;
-      renderedReduced = current.reduceParticles;
     };
 
     const boot = async () => {
       const PIXI = await import("pixi.js");
       if (disposed) return;
       app = new PIXI.Application();
-      await app.init({ resizeTo: host, backgroundAlpha: 0, antialias: true, resolution: Math.min(window.devicePixelRatio, 2), autoDensity: true });
+      await app.init({ width: Math.max(1, host.clientWidth), height: Math.max(1, host.clientHeight), autoStart: false, backgroundAlpha: 0, antialias: true, resolution: Math.min(window.devicePixelRatio, 2), autoDensity: true });
+      initialized = true;
       if (disposed) {
         app.destroy(true);
         return;
       }
       host.appendChild(app.canvas);
+      setStatus("ready");
       field = new PIXI.Graphics();
       app.stage.addChild(field);
-      app.ticker.maxFPS = 20;
-      redrawRef.current = draw;
-      draw();
-      app.ticker.add(() => {
-        if (!app) return;
-        const current = propsRef.current;
-        if (app.screen.width !== renderedWidth
-          || app.screen.height !== renderedHeight
-          || current.facility !== renderedFacility
-          || current.frame !== renderedFrame
-          || current.reduceParticles !== renderedReduced) draw();
-      });
+      redrawRef.current = requestDraw;
+      observer = new ResizeObserver(requestDraw);
+      observer.observe(host);
+      document.addEventListener("visibilitychange", syncVisibility);
+      requestDraw();
     };
-    void boot();
+    setStatus("loading");
+    void boot().catch(() => { if (!disposed) setStatus("error"); });
     return () => {
       disposed = true;
       redrawRef.current = null;
-      app?.destroy(true, { children: true });
+      cancelAnimationFrame(pendingFrame);
+      observer?.disconnect();
+      document.removeEventListener("visibilitychange", syncVisibility);
+      if (initialized) app?.destroy(true, { children: true });
       host.replaceChildren();
     };
-  }, []);
+  }, [attempt]);
 
-  return <div ref={hostRef} className="size-full" aria-label="X-Ray true-state replay" role="img" />;
+  return <div className="absolute inset-0"><div ref={hostRef} className="size-full" aria-label={t("xrayField")} role="img" /><CanvasStatus status={status} onRetry={() => setAttempt((value) => value + 1)} /></div>;
+}
+
+function CanvasStatus({ status, onRetry }: { status: "loading" | "ready" | "error"; onRetry: () => void }) {
+  const { t } = useI18n();
+  if (status === "ready") return null;
+  return <div className="absolute inset-0 grid place-items-center p-6" role="status"><div className="max-w-sm text-center"><p className="text-sm leading-7 text-muted-foreground">{t(status === "error" ? "canvasError" : "initializing")}</p>{status === "error" && <Button variant="secondary" className="mt-4" onClick={onRetry}>{t("retryCanvas")}</Button>}</div></div>;
 }

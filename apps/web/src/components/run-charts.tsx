@@ -1,12 +1,13 @@
 "use client";
 
 import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from "recharts";
+import { memo } from "react";
 import type { ReplayFrame } from "@echo/inference-core";
 import { useI18n } from "@/lib/i18n";
 
 const tooltipStyle = { background: "#081011", border: "1px solid rgba(121,221,203,.25)", borderRadius: 0, fontFamily: "IBM Plex Mono", fontSize: 10 };
 
-export function ReplayLineChart({ frames }: { frames: ReplayFrame[] }) {
+export const ReplayLineChart = memo(function ReplayLineChart({ frames }: { frames: ReplayFrame[] }) {
   const { t } = useI18n();
   const data = frames.map((frame) => ({ tick: frame.tick, uncertainty: Number(frame.entropy.toFixed(3)), hunter: Number(frame.hunterEntropy.toFixed(3)), energy: Number(frame.energy.toFixed(2)), signal: Number(frame.signature.toFixed(2)) }));
   return (
@@ -27,9 +28,9 @@ export function ReplayLineChart({ frames }: { frames: ReplayFrame[] }) {
       </LineChart>
     </ResponsiveContainer>
   );
-}
+});
 
-export function TradeoffChart({ frames }: { frames: ReplayFrame[] }) {
+export const TradeoffChart = memo(function TradeoffChart({ frames }: { frames: ReplayFrame[] }) {
   const { t } = useI18n();
   const data = frames.filter((frame) => frame.action.startsWith("sensor:")).map((frame) => ({ information: Number(frame.informationGain.toFixed(3)), signature: Number(frame.signature.toFixed(2)), action: frame.action.replace("sensor:", "") }));
   return (
@@ -43,4 +44,4 @@ export function TradeoffChart({ frames }: { frames: ReplayFrame[] }) {
       </ScatterChart>
     </ResponsiveContainer>
   );
-}
+});

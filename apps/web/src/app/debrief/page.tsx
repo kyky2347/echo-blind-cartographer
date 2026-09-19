@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { scoreRun } from "@echo/inference-core";
 import { ReplayLineChart, TradeoffChart } from "@/components/run-charts";
+import { RunStorageNotice } from "@/components/run-storage-notice";
 import { buttonVariants } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { loadRun, saveRun, type StoredRun } from "@/lib/storage";
@@ -40,6 +41,7 @@ export default function DebriefPage() {
   ];
   return (
     <main className="mx-auto min-h-screen max-w-[1440px] px-4 pb-20 pt-28 md:px-8">
+      <RunStorageNotice run={run} />
       <section className="grid gap-8 border-b border-border/70 pb-10 lg:grid-cols-[1fr_auto] lg:items-end">
         <div>
           <p className={`font-mono text-xs uppercase tracking-[.28em] ${state.result === "survived" ? "text-accent" : "text-destructive"}`}>{state.result === "survived" ? t("survived") : t("lost")}</p>

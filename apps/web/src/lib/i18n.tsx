@@ -14,7 +14,9 @@ const messages = {
     energy: "Energy", uncertainty: "Uncertainty", signature: "Signature", cores: "Cores", hunter: "Hunter", quiet: "Quiet", disturbance: "Disturbance", searching: "Searching", hunting: "Hunting", contact: "Contact",
     passive: "Listen", ping: "Short ping", sonar: "Active sonar", beacon: "Triangulate", info: "Expected info", cost: "Energy", emitted: "Signal emitted", low: "Low", medium: "Medium", high: "High",
     objective: "Core signal", extraction: "Extraction signal", faint: "Faint", unstable: "Unstable", clear: "Clear", north: "North", east: "East", south: "South", west: "West",
-    copySeed: "Copy seed", copied: "Seed copied", restart: "Replay seed", menu: "Leave run", skip: "Skip intro", continue: "Continue", begin: "Estimate position",
+    copySeed: "Copy seed", copied: "Seed copied", copyFailed: "Copy unavailable — select the seed below", restart: "Replay seed", menu: "Leave run", skip: "Skip intro", continue: "Continue", begin: "Estimate position",
+    beliefField: "Probabilistic map field", xrayField: "X-Ray true-state replay", canvasError: "The map could not start. Retry, or enable graphics acceleration in your browser.", retryCanvas: "Retry map",
+    sessionOnly: "This replay is available for this session only. Browser storage is full or unavailable. Download a backup before reloading or closing this tab.", downloadReplay: "Download replay JSON",
     intro1: "Location unknown", intro2: "Visual system offline", intro3: "Localization failure", intro4: "Three data cores detected", intro5: "Something else is moving",
     tutorialMove: "Move once. Your body may not obey perfectly.", tutorialListen: "Listen without giving much away.", tutorialPing: "Ping the structure. Watch the belief contract.", tutorialSonar: "Use sonar. Learn more—and announce yourself.", tutorialDone: "More information creates more signal.",
     survived: "Survived", lost: "Signal terminated", debrief: "Run debrief", time: "Time", moves: "Moves", scans: "Scans", energyUsed: "Energy used", maxUncertainty: "Max uncertainty", avgUncertainty: "Average uncertainty", informationGain: "Information gained", generated: "Signature generated", contacts: "Contact events", score: "Run score", openReplay: "Open X-Ray replay", newRun: "New run",
@@ -38,7 +40,9 @@ const messages = {
     energy: "能量", uncertainty: "不确定度", signature: "信号暴露", cores: "数据核心", hunter: "猎手", quiet: "寂静", disturbance: "异常", searching: "搜索中", hunting: "猎杀中", contact: "接触",
     passive: "被动聆听", ping: "短促脉冲", sonar: "主动声呐", beacon: "信标三角定位", info: "预期信息量", cost: "能量", emitted: "发射信号", low: "低", medium: "中", high: "高",
     objective: "核心信号", extraction: "撤离信号", faint: "微弱", unstable: "不稳定", clear: "清晰", north: "北", east: "东", south: "南", west: "西",
-    copySeed: "复制种子", copied: "已复制种子", restart: "重玩此种子", menu: "离开本局", skip: "跳过序章", continue: "继续", begin: "估计你的位置",
+    copySeed: "复制种子", copied: "已复制种子", copyFailed: "无法复制，请选中下方种子手动复制", restart: "重玩此种子", menu: "离开本局", skip: "跳过序章", continue: "继续", begin: "估计你的位置",
+    beliefField: "概率地图场", xrayField: "X-Ray 真实状态回放", canvasError: "地图未能启动。请重试，或在浏览器设置中开启图形加速。", retryCanvas: "重试地图",
+    sessionOnly: "浏览器存储已满或不可用，此回放仅在当前会话中保留。请在刷新或关闭页面前下载备份。", downloadReplay: "下载回放 JSON",
     intro1: "位置未知", intro2: "视觉系统离线", intro3: "定位失败", intro4: "检测到三个数据核心", intro5: "还有某个东西在移动",
     tutorialMove: "移动一次。你的身体不一定完全听从指令。", tutorialListen: "先听。几乎不留下痕迹。", tutorialPing: "向结构发出脉冲，观察信念云收缩。", tutorialSonar: "使用声呐。看得更清楚，也让它听得更清楚。", tutorialDone: "更多信息，会制造更多信号。",
     survived: "成功撤离", lost: "信号终止", debrief: "本局复盘", time: "时间", moves: "移动", scans: "扫描", energyUsed: "消耗能量", maxUncertainty: "最高不确定度", avgUncertainty: "平均不确定度", informationGain: "获得信息", generated: "产生信号", contacts: "接触事件", score: "本局评分", openReplay: "打开 X-Ray 回放", newRun: "开始新一局",
@@ -64,15 +68,17 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("en");
   useEffect(() => {
-    const stored = window.localStorage.getItem("echo-locale");
-    if (stored === "en" || stored === "zh") {
-      setLocaleState(stored);
-      document.documentElement.lang = stored === "zh" ? "zh-CN" : "en";
-    }
+    try {
+      const stored = window.localStorage.getItem("echo-locale");
+      if (stored === "en" || stored === "zh") {
+        setLocaleState(stored);
+        document.documentElement.lang = stored === "zh" ? "zh-CN" : "en";
+      }
+    } catch { /* Language switching stays available when storage is blocked. */ }
   }, []);
   const setLocale = (next: Locale) => {
     setLocaleState(next);
-    window.localStorage.setItem("echo-locale", next);
+    try { window.localStorage.setItem("echo-locale", next); } catch { /* Keep the choice for this session. */ }
     document.documentElement.lang = next === "zh" ? "zh-CN" : "en";
   };
   const value = useMemo(() => ({ locale, setLocale, t: (key: MessageKey) => messages[locale][key] }), [locale]);

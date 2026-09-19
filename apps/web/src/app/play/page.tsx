@@ -41,13 +41,27 @@ export default function PlayPage() {
   const reduceParticles = useGameStore((state) => state.reduceParticles);
   const setReduceParticles = useGameStore((state) => state.setReduceParticles);
   const lastUpdateMs = useGameStore((state) => state.lastUpdateMs);
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [debug, setDebug] = useState(false);
   const [debugExpanded, setDebugExpanded] = useState(false);
   const [renderPerformance, setRenderPerformance] = useState({ fps: 0, renderMs: 0 });
   const priorMode = useRef(game?.hunterMode);
   const priorCores = useRef(game?.truth.collected.filter(Boolean).length ?? 0);
   const completed = useRef(false);
+
+  useEffect(() => () => clearTimeout(copyTimer.current), []);
+  const copySeed = async () => {
+    if (!game) return;
+    clearTimeout(copyTimer.current);
+    try {
+      await navigator.clipboard.writeText(game.seed);
+      setCopyStatus("copied");
+      copyTimer.current = setTimeout(() => setCopyStatus("idle"), 1800);
+    } catch {
+      setCopyStatus("failed");
+    }
+  };
 
   useEffect(() => {
     if (!game) restore(createGame("ECHO-482951", "signal"));
@@ -92,9 +106,10 @@ export default function PlayPage() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!introSeen || event.repeat) return;
-      const keyMap: Record<string, Direction> = { w: "north", ArrowUp: "north", d: "east", ArrowRight: "east", s: "south", ArrowDown: "south", a: "west", ArrowLeft: "west" };
-      const direction = keyMap[event.key];
+      if (!introSeen || event.repeat || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [contenteditable=true], [role=slider], [role=switch]")) return;
+      const keyMap: Record<string, Direction> = { w: "north", arrowup: "north", d: "east", arrowright: "east", s: "south", arrowdown: "south", a: "west", arrowleft: "west" };
+      const direction = keyMap[event.key.toLowerCase()];
       if (direction) { event.preventDefault(); actMove(direction); }
       if (event.key === "1") actSensor("passive");
       if (event.key === "2") actSensor("ping");
@@ -118,6 +133,7 @@ export default function PlayPage() {
 
   return (
     <main className="relative h-[100svh] overflow-hidden bg-[#020506]">
+      <div className="contents" inert={!introSeen}>
       <BeliefCanvas projection={projection} reduceParticles={reduceParticles} debug={debugLayer} onPerformance={debug ? setRenderPerformance : undefined} />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_24%,rgba(2,5,6,.44)_68%,rgba(2,5,6,.9)_100%)]" />
 
@@ -153,7 +169,7 @@ export default function PlayPage() {
             <p className="font-mono text-[10px] uppercase text-muted-foreground">{t(signal.strength)}</p>
           </div>
           <div className="mt-4 h-px bg-border"><div className="h-px bg-accent" style={{ width: `${Math.max(8, 100 - signal.distance * 3)}%` }} /></div>
-          <p className="mt-5 survey-label">Hunter / {t(game.hunterMode)}</p>
+          <p className="mt-5 survey-label">{t("hunter")} / {t(game.hunterMode)}</p>
           <div className={cn("mt-2 h-1 w-full", game.hunterMode === "quiet" ? "bg-accent/40" : game.hunterMode === "disturbance" ? "bg-[#c8a75e]" : "bg-destructive animate-pulse")} />
         </div>
       </aside>
@@ -171,10 +187,11 @@ export default function PlayPage() {
         </div>
         <MovementPad onMove={actMove} t={t} />
         <div className="flex flex-wrap items-center justify-center gap-4 font-mono text-[9px] uppercase tracking-[.14em] text-muted-foreground">
-          <button type="button" onClick={async () => { await navigator.clipboard.writeText(game.seed); setCopied(true); setTimeout(() => setCopied(false), 1600); }} className="flex items-center gap-2 hover:text-foreground"><Copy className="size-3" />{copied ? t("copied") : t("copySeed")}</button>
+          <button type="button" onClick={copySeed} aria-label={copyStatus === "copied" ? t("copied") : t("copySeed")} className="flex min-h-10 items-center gap-2 hover:text-foreground"><Copy className="size-3" /><span role="status">{copyStatus === "copied" ? t("copied") : t("copySeed")}</span></button>
           <Link href="/" className="flex items-center gap-2 hover:text-foreground"><DoorOpen className="size-3" />{t("menu")}</Link>
           <label className="flex items-center gap-2"><Accessibility className="size-3" />{t("reduceParticles")}<Switch checked={reduceParticles} onCheckedChange={setReduceParticles} /></label>
         </div>
+        {copyStatus === "failed" && <div role="status" className="max-w-full text-center text-xs text-muted-foreground"><p>{t("copyFailed")}</p><code className="mt-1 block select-all break-all text-foreground">{game.seed}</code></div>}
       </div>
 
       {debug && (
@@ -187,6 +204,7 @@ export default function PlayPage() {
           </div>
         </div>
       )}
+      </div>
       {!introSeen && <IntroOverlay onDone={() => setIntroSeen(true)} t={t} />}
     </main>
   );
@@ -237,12 +255,12 @@ function MovementPad({ onMove, t }: { onMove: (direction: Direction) => void; t:
 
 function IntroOverlay({ onDone, t }: { onDone: () => void; t: ReturnType<typeof useI18n>["t"] }) {
   return (
-    <div className="absolute inset-0 z-50 grid place-items-center bg-[#020405]/96 p-5">
+    <div role="dialog" aria-modal="true" aria-label={t("subtitle")} className="absolute inset-0 z-50 grid place-items-center overflow-y-auto bg-[#020405]/96 p-5">
       <div className="w-full max-w-xl corner-marks p-8 md:p-12">
         <div className="flex flex-col gap-3">
           {(["intro1", "intro2", "intro3", "intro4", "intro5"] as const).map((key, index) => <p key={key} className={cn("font-mono text-xs uppercase tracking-[.2em]", index === 4 ? "text-destructive" : index === 3 ? "text-accent" : "text-muted-foreground")}>{t(key)}</p>)}
         </div>
-        <Button className="mt-10 w-full" size="lg" onClick={onDone}>{t("begin")}<ArrowRight data-icon="inline-end" /></Button>
+        <Button autoFocus className="mt-10 w-full" size="lg" onClick={onDone}>{t("begin")}<ArrowRight data-icon="inline-end" /></Button>
       </div>
     </div>
   );
